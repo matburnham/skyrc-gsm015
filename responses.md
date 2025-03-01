@@ -128,6 +128,8 @@ Note: The first 8K appears to be thrown away and data continues to 1M
 
 # Response E - Unknown
 
+Response E seems to be sent at the end of the data
+
 | Element | Length | Example | Notes |
 |-|-|-|-|
 | Endpoint | 1 byte | 0x02 | |
