@@ -1,4 +1,4 @@
-# Note: this is a rough and ready work-in-progress. It doesn't quite work right yet as 
+# Note: this is a rough and ready work-in-progress. It may not quite work right yet as 
 # the data isn't quite right.
 #
 # Stored data (from this code, but similar shows in Wireshark for the original software)
@@ -13,92 +13,81 @@
 # | Third block | 16 bytes | | |
 # | Fourth block | 16 bytes | | |
 #
-# Only the first block seems to have valid identifiers.
-# I don't understand why there sometimes seems to be a further offset
-# and it gerts out of sync, but not every time
+# This code now throws away the endpoint and response identifier bytes every 64 bytes,
+# and assumes all blocks are position records.
+
+# TODO: Check speed and altitude units are correct
+# TODO: identify track start/end
+# TODO: check we're getting all the positions
+# TODO: figure out what the deal is with correlating time records with position records
+#       - seems to be too far between date records and unclear if consistenly receiving
+#       a position at 1Hz
 
 import struct
 
 SKIP_BYTES = 8192
 RECORD_SIZE = 16
 
-def parse_response(r):
-    endpoint = r[0]
-    response_identifier = chr(r[1])
+def parse_positions(d):
+    positions = []
+    for i in range(0, len(d), RECORD_SIZE):
+        p = d[i:i+RECORD_SIZE]
+        positions.append(parse_position(p))
+    return positions
+
+def parse_position(p):
+    data_type = p[:3].hex()
     
-    if endpoint not in [0x00, 0x01, 0x02, 0xff]:
-        print("Unexpected endpoint 0x{:x}".format(endpoint))
-        return None
+    if data_type == 'ffffff':
+        return {'Data Type': 'NOP', 'Payload': p.hex()}
+    elif data_type == 'eeeeee':
+        timestep = p[0]
+        milmode = p[1]
+        timezone = p[2]
+        year = 2000 + p[6]
+        month = p[7]
+        day = p[8]
+        hour = p[9]
+        minute = p[10]
+        second = p[11]
+        return {'Data Type': 'DateTime', 'Timestep': timestep, 'MilMode': milmode, 'TimeZone': timezone,
+                'Date': f"{year}-{month:02}-{day:02}", 'Time': f"{hour:02}:{minute:02}:{second:02}"}
+    elif data_type == 'dddddd':
+        distance = int.from_bytes(p[:3], 'big')
+        return {'Data Type': 'Distance', 'Distance': distance}
+    else:
+        speed = int.from_bytes(p[0:3], 'big')
+        altitude = int.from_bytes(p[3:6], 'big') # TODO: consider sign
+        lon_polarity = "+" if p[6]==0 else "-"
+        lon_degrees = p[7]
+        lon_minutes = int.from_bytes(p[8:11], 'big')
+        lat_polarity = "+" if p[11]==0 else "-"
+        lat_degrees = p[12]
+        lat_minutes = int.from_bytes(p[13:16], 'big')
+        return({'Data Type': 'Position', 'Speed': speed, 'Altitude': altitude,
+                'Longitude': "{}{}.{}".format(lon_polarity, lon_degrees, lon_minutes),
+                'Latitude': "{}{}.{}".format(lat_polarity, lat_degrees, lat_minutes)})
 
-    if response_identifier == 'N':  # Serial Number
-        serial_number = r[2:18].hex()
-        return {'Response': 'N', 'Serial Number': serial_number}
-
-    elif response_identifier == 'G':  # Basic Data
-        miles = r[2]
-        frequency = r[3]
-        timezone = r[4]
-        firmware = struct.unpack('>H', r[6:8])[0]
-        firmware_version = f"{firmware >> 8}.{firmware & 0xFF}"
-        return {'Response': 'G', 'Miles': miles, 'Frequency': frequency, 'TimeZone': timezone, 'Firmware': firmware_version}
-
-    elif response_identifier == 'P':  # Position
-        data_type = r[2:5].hex()
-        if data_type == 'ffffff':
-            #return {'Response': 'P', 'Data Type': 'NOP', 'Payload': r[6:].hex()}
-            return
-        elif data_type == 'eeeeee':
-            year = 2000 + r[8]
-            month = r[9]
-            day = r[10]
-            hour = r[11]
-            minute = r[12]
-            second = r[13]
-            return {'Response': 'P', 'Data Type': 'DateTime', 'Date': f"{year}-{month:02}-{day:02}", 'Time': f"{hour:02}:{minute:02}:{second:02}"}
-        elif data_type == 'dddddd':
-            distance = int.from_bytes(r[5:8], 'big')
-            return {'Response': 'P', 'Data Type': 'Distance', 'Distance': distance}
-        else:
-            print(r)
-            print(r.hex())
-            speed = int.from_bytes(r[2:5], 'big')
-            altitude = int.from_bytes(r[5:8], 'big') # TODO: consider sign
-            lon_polarity = "+" if r[8]==0 else "-"
-            lon_degrees = r[9]
-            lon_minutes = int.from_bytes(r[10:13], 'big')
-            lat_polarity = "+" if r[13]==0 else "-"
-            lat_degrees = r[14]
-            lat_minutes = int.from_bytes(r[15:18], 'big')
-            print({'Response': 'P', 'Data Type': 'Position', 'Speed': speed, 'Altitude': altitude,
-                   'Longitude': "{}{}.{}".format(lon_polarity, lon_degrees, lon_minutes),
-                   'Latitude': "{}{}.{}".format(lat_polarity, lat_degrees, lat_minutes)})
-            # exit(1)
-            return {'Response': 'P', 'Data Type': 'Position', 'Speed': speed, 'Altitude': altitude, 'Longitude': (lon_polarity, lon_degrees, lon_minutes), 'Latitude': (lat_polarity, lat_degrees, lat_minutes)}
-
-    elif response_identifier == 'E':  # Unknown
-        return {'Response': 'E', 'Data': 'Unknown'}
-
-    return None
+CHUNK_SIZE = 64
+def strip_reponse_identifier(data):
+    result = bytearray()
+    for i in range(0, len(data), CHUNK_SIZE):
+        chunk = data[i:i + CHUNK_SIZE]
+        # if len(chunk) == CHUNK_SIZE:
+        result.extend(chunk[2:])
+        # else:
+            # result.extend(chunk)
+    return bytes(result)
 
 def process_file(filename):
     with open(filename, 'rb') as f:
-        #f.seek(SKIP_BYTES) # Skipped these before storing
-        f.seek(0x3e00) # Skip to something with known location date
-        i = 0
-        while True:
-            r = f.read(RECORD_SIZE)
-            if not r:
-                print("Failed to read record")
-                exit(1)
-            if len(r) < RECORD_SIZE:
-                print("Insufficiently read {} bytes".format(len(r)))
-                exit(1)
-            print(r)
-            result = parse_response(r)
-            if result:
-                print(result)
-            i = i + 1
-            if(i>10):
-                break
+        data = f.read()
+        # Strip first 2 bytes from every 64 bytes, i.e. all endpoint and response identifiers
+        # Assumption is that all responses are Position responses
+        data = strip_reponse_identifier(data)
+        result = parse_positions(data[8192:])
+        for r in result:
+            if r['Data Type'] != 'NOP':
+                print(r)
 
-process_file('output_data.bin')
+process_file('2025-03-03_output_data.bin')
