@@ -52,8 +52,6 @@ def parse_position(p):
                 'Timestep': timestep,
                 'MilMode': milmode,
                 'TimeZone': timezone,
-                # 'Date': f"{year}-{month:02}-{day:02}", 'Time': f"{hour:02}:{minute:02}:{second:02}",
-                # 'Year': year, 'Month': month, 'Day': day, 'Hour': hour, 'Minute': minute, 'Second': second
                 'DateTime': datetime.datetime(year, month, day, hour, minute, second)
                 }
     elif data_type == 'dddddd':
@@ -156,7 +154,7 @@ def write_igc(filename, data):
                     latitude=r['Latitude'],
                     longitude=r['Longitude'],
                     valid=True,
-                    gps_alt=int(r['Altitude']*0.3048), # TODO: check units
+                    gps_alt=int(r['Altitude']),
                 )
                 dt = dt + datetime.timedelta(seconds=1)
             elif r['Data Type'] == 'NOP':
@@ -165,7 +163,7 @@ def write_igc(filename, data):
                 print(r)
         print('End', dt)
 
-data = process_file('2025-03-03_output_data.bin')
+data = process_file('2025-03-09_output_data.bin')
 flights = split_flights(data)
 for flight in flights:
     r = flight[0]
