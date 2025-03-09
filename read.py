@@ -71,8 +71,8 @@ def parse_position(p):
         return({'Data Type': 'Position',
                 'Speed': speed,
                 'Altitude': altitude,
-                'Longitude': float("{}{}.{}".format(lon_polarity, lon_degrees, lon_minutes)),
-                'Latitude': float("{}{}.{}".format(lat_polarity, lat_degrees, lat_minutes))})
+                'Longitude': float("{}{}.{:07d}".format(lon_polarity, lon_degrees, lon_minutes)),
+                'Latitude': float("{}{}.{:07d}".format(lat_polarity, lat_degrees, lat_minutes))})
 
 CHUNK_SIZE = 64
 def strip_reponse_identifier(data):
