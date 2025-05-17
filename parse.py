@@ -16,21 +16,24 @@
 # This code now throws away the endpoint and response identifier bytes every 64 bytes,
 # and assumes all blocks are position records.
 
-# TODO: check we're getting all the positions
-# TODO: check timing works correctly if you add 1 second each position
-
-import aerofiles
 import datetime
-import struct
 
+# The first 8192 bytes of the data do not relate to flights.
+# The format of these bytes is not fully understood.
 SKIP_BYTES = 8192
 RECORD_SIZE = 16
 
 def parse_positions(d):
+    # stripped_data = d[SKIP_BYTES:]
     positions = []
+    started = False
     for i in range(0, len(d), RECORD_SIZE):
         p = d[i:i+RECORD_SIZE]
-        positions.append(parse_position(p))
+        pos = parse_position(p)
+        if started or pos['Data Type'] == 'DateTime':
+            # print(pos)
+            started = True
+            positions.append(pos)
     return positions
 
 def parse_position(p):
@@ -72,32 +75,15 @@ def parse_position(p):
                 'Longitude': float("{}{}.{:07d}".format(lon_polarity, lon_degrees, lon_minutes)),
                 'Latitude': float("{}{}.{:07d}".format(lat_polarity, lat_degrees, lat_minutes))})
 
-CHUNK_SIZE = 64
-def strip_reponse_identifier(data):
-    result = bytearray()
-    for i in range(0, len(data), CHUNK_SIZE):
-        chunk = data[i:i + CHUNK_SIZE]
-        result.extend(chunk[2:])
-    return bytes(result)
-
-def process_file(filename):
-    with open(filename, 'rb') as f:
-        data = f.read()
-        # Strip first 2 bytes from every 64 bytes, i.e. all endpoint and response identifiers
-        # Assumption is that all responses are Position responses
-        data = strip_reponse_identifier(data)
-        result = parse_positions(data[8192:])
-    return result
-
 def dump_rec_type(data):
     prev = None
-    i = 0
+    i = 1
     for r in data:
         if r['Data Type'] == prev:
-            i=i+1
+            i = i+1
         else:
             print('{} x {}'.format(prev, i))
-            i=0
+            i = 1
         prev = r['Data Type']
 
 def dump_recs(data):
@@ -108,64 +94,14 @@ def dump_recs(data):
 def split_flights(data):
     flights = []
     flight = []
+    # Flights start with a DateTime record, accumulate until we get a DateTime record, or EOF
     for r in data:
-        if r['Data Type'] == 'DateTime':
+        if r['Data Type'] == 'NOP':
+            continue
+        elif r['Data Type'] == 'DateTime':
             if len(flight) > 0:
                 flights.append(flight)
             flight = []
         flight.append(r)
     flights.append(flight)
     return flights
-
-def write_igc(filename, data):
-    with open(filename, 'wb') as fp:
-        writer = aerofiles.igc.Writer(fp)
-
-        # Note: https://aerofiles.readthedocs.io/en/latest/guide/igc-writing.html suggests using FXA,
-        # but we don't have accuracy data to use.       
-        #writer.write_fix_extensions([('FXA', 3), ('SIU', 2), ('ENL', 3)])
-
-        need_headers = True
-        dt = None
-
-        for r in data:
-            if r['Data Type'] == 'DateTime':
-                print('End', dt)
-                dt = r['DateTime']
-                print('Start', dt)
-
-                # Write header as soon as we've got a date
-                if(need_headers):
-                    writer.write_headers({
-                        'manufacturer_code': 'XXX',
-                        'logger_id': 'YYY',
-                        'date': dt.date(),
-                        'logger_type': 'SKYRC,GSM-015',
-                        'gps_receiver': 'Unknown',
-                    })
-                    need_headers = False
-
-            elif r['Data Type'] == 'Position':
-                if dt is None:
-                    print('.')
-                    continue
-                writer.write_fix(
-                    dt.time(),
-                    latitude=r['Latitude'],
-                    longitude=r['Longitude'],
-                    valid=True,
-                    gps_alt=int(r['Altitude']),
-                )
-                dt = dt + datetime.timedelta(seconds=1)
-            elif r['Data Type'] == 'NOP':
-                pass
-            else:
-                print(r)
-        print('End', dt)
-
-data = process_file('2025-03-09_output_data.bin')
-flights = split_flights(data)
-for flight in flights:
-    r = flight[0]
-    dt = r['DateTime'].strftime("%Y%m%d-%H%M%S")
-    write_igc("output-{}.igc".format(dt), flight)
