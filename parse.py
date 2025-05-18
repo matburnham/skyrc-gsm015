@@ -1,30 +1,23 @@
-# Note: this is a rough and ready work-in-progress. It may not quite work right yet as 
-# the data isn't quite right.
-#
-# Stored data (from this code, but similar shows in Wireshark for the original software)
-# seems to be like this:
-#
-# | Element| Length | Example | Notes |
-# |-|-|-|-|
-# | Endpoint | 1 byte | 0x02 | |
-# | Reponse identifier | 1 byte | 'P' | |
-# | First block | 14 bytes | | |
-# | Second block | 16 bytes | | |
-# | Third block | 16 bytes | | |
-# | Fourth block | 16 bytes | | |
-#
-# This code now throws away the endpoint and response identifier bytes every 64 bytes,
-# and assumes all blocks are position records.
+"""SkyRC GSM015 USB Data Reader - Parsiong functions
+
+Takes raw data read from the SkyRC GSM015 device and parses it into positions and flights.
+
+Note: this module is based on a limited understanding of the data format.
+It may not be entirely correct, but errors should become apparent quickly.
+"""
 
 import datetime
 
-# The first 8192 bytes of the data do not relate to flights.
-# The format of these bytes is not fully understood.
-SKIP_BYTES = 8192
-RECORD_SIZE = 16
-
 def parse_positions(d):
-    # stripped_data = d[SKIP_BYTES:]
+    """Returns a list of parsed positions (and other records) from the raw datastream."""
+
+    # The first 8192 bytes of the data do not appear to relate directly to flights.
+    # The format of this header data is not fully understood. The first 8192 bytes
+    # could be simply skipped, but this data appears to confirm to a similar record
+    # structure so can be skipped until the first DateTime record indicating the
+    # start of a flight.
+
+    RECORD_SIZE = 16
     positions = []
     started = False
     for i in range(0, len(d), RECORD_SIZE):
@@ -37,6 +30,7 @@ def parse_positions(d):
     return positions
 
 def parse_position(p):
+    """Returns an object by parsing the data in a single position or other record."""
     data_type = p[:3].hex()
     
     if data_type == 'ffffff':
@@ -76,6 +70,7 @@ def parse_position(p):
                 'Latitude': float("{}{}.{:07d}".format(lat_polarity, lat_degrees, lat_minutes))})
 
 def dump_rec_type(data):
+    """Dump the number of records of each type. Useful for debugging and to understand the data format."""
     prev = None
     i = 1
     for r in data:
@@ -87,11 +82,15 @@ def dump_rec_type(data):
         prev = r['Data Type']
 
 def dump_recs(data):
+    """Dump all records. Useful for debugging and to understand the data format."""
     for r in data:
         if r['Data Type'] != 'NOP':
             print(r)
 
 def split_flights(data):
+    """Returns a list of flights based on the parsed positions.
+    A flight starts with a DateTime record and ends with a Distance record,
+    although we just look for another DateTime or EOF."""
     flights = []
     flight = []
     # Flights start with a DateTime record, accumulate until we get a DateTime record, or EOF
