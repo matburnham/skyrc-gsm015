@@ -22,8 +22,8 @@ def write_igc(filename, flight_positions):
                 # Write header as soon as we've got a date
                 if(need_headers):
                     writer.write_headers({
-                        'manufacturer_code': 'SKYRC',
-                        'logger_id': 'GSM015',
+                        'manufacturer_code': 'SKY',
+                        'logger_id': '015',
                         'date': dt.date(),
                         'logger_type': 'SKYRC,GSM-015',
                         'gps_receiver': 'Unknown',
