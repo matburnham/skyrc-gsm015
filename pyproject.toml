@@ -8,7 +8,7 @@ exclude = [
 ]
 [project]
 name = "skyrc_gsm015"
-version = "0.1.2"
+version = "0.1.3"
 description = "Command line Python code to extract track logs from SkyRC GSM-015 GNSS Speed Meter"
 authors = [{name = "Mat Burnham", email = "matburnham@gmail.com"}]
 readme = "README.md"
