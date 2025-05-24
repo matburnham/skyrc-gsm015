@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "skyrc_gsm015"
+version = "0.1.0"
+description = "Command line Python code to extract track logs from SkyRC GSM-015 GNSS Speed Meter"
+authors = [{name = "Mat Burnham", email = "matburnham@gmail.com"}]
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+dependencies = [
+    "aerofiles"
+]
+
+[project.optional-dependencies]
+tqdm = [ "tqdm" ]
+
+[project.urls]
+Homepage = "https://github.com/matburnham/skyrc-gsm015"
+Issues = "https://github.com/matburnham/skyrc-gsm015/issues"
+
+[project.scripts]
+skyrc-gsm015 = "skyrc-gsm015.skyrc-gsm015:main"
