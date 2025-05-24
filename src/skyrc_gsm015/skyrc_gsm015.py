@@ -16,9 +16,9 @@ Last changed: 2025-18-05
 
 import argparse
 
-import skyrc_usb
-import parse
-import igc
+from . import skyrc_usb
+from . import parse
+from . import igc
 
 def save_data(filename, data):
   """Save the binary data to filename."""
